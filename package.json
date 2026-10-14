@@ -1,0 +1,32 @@
+{
+  "name": "sa-mp",
+  "version": "0.1.0",
+  "description": "SuperApp 托管 H5 本地开发 CLI：preview / pack / submit，并安装 AI Skill",
+  "type": "module",
+  "bin": {
+    "sa-mp": "./bin/sa-mp.mjs"
+  },
+  "files": [
+    "bin",
+    "bundled",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "superapp",
+    "micro-app",
+    "h5",
+    "cli"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/HGthecode/superapp-mp-dev.git"
+  },
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/HGthecode/superapp-mp-dev/issues"
+  },
+  "homepage": "https://github.com/HGthecode/superapp-mp-dev#readme"
+}

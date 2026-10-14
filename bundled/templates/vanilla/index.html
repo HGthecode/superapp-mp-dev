@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>微应用</title>
+  <link rel="stylesheet" href="__SUPER_APP_STATIC__/mp/tailwind.1.0.0.css" />
+  <link rel="stylesheet" href="__SUPER_APP_STATIC__/mp/vant.4.9.21.css" />
+  <link rel="stylesheet" href="__SUPER_APP_STATIC__/mp/superapp-ui.1.0.0.css" />
+  <link rel="stylesheet" href="./assets/style.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- HTML 无构建：自定义标签禁止用 />，须写成成对闭合标签 -->
+    <van-nav-bar title="微应用"></van-nav-bar>
+    <div class="p-4">
+      <van-cell-group inset>
+        <van-cell title="用户" :value="userLabel"></van-cell>
+      </van-cell-group>
+      <div class="mt-4 px-4">
+        <van-button type="primary" block @click="onHello">打招呼</van-button>
+      </div>
+    </div>
+  </div>
+  <script src="__SUPER_APP_STATIC__/tmuijssdk/tmuiJssdk1.0.0.min.js" crossorigin></script>
+  <script src="__SUPER_APP_STATIC__/mp/super-app-jssdk.1.0.0.js" crossorigin></script>
+  <script src="__SUPER_APP_STATIC__/mp/super-app-open.1.0.0.js" crossorigin></script>
+  <script src="__SUPER_APP_STATIC__/mp/vue.3.5.13.global.prod.js" crossorigin></script>
+  <script src="__SUPER_APP_STATIC__/mp/vant.4.9.21.min.js" crossorigin></script>
+  <script src="./assets/main.js"></script>
+</body>
+</html>

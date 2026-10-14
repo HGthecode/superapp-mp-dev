@@ -1,0 +1,12 @@
+/**
+ * 本微应用局部样式 / 换肤
+ * 覆盖 --sa-* 或 --van-* 即可；不要引入第二套组件库。
+ * Source: skills/super-app-mp-dev
+ */
+
+/* 示例：换主色时取消注释
+:root {
+  --sa-brand-main: #2563eb;
+  --van-primary-color: var(--sa-brand-main);
+}
+*/
