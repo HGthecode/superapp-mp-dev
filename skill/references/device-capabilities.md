@@ -10,20 +10,38 @@ App 用 `x-webview-u` 打开微应用。页面先加载 `tmuiJssdk`，再加载 
 // Source: skills/super-app-mp-dev
 SuperApp.getUserInfo().then(user => { /* id nickname avatar phone code */ })
 SuperApp.close()
+SuperApp.navigateTo({ url: './product.html?id=1' })
+SuperApp.redirectTo({ url: './pay-result.html' })
+SuperApp.reLaunch({ url: './index.html' })
+SuperApp.navigateBack({ delta: 1 })
 SuperApp.openMicroApp({ appid: 'xxxxxxxx', query: { from: 'demo' } })
 SuperApp.setTitle('订单详情')
 SuperApp.getEnterOptions().then(opts => { /* { appid, query } */ })
+SuperApp.getDataSession({ env: 'prod' }).then(s => { /* accessToken / expiresIn / env / appid */ })
+SuperApp.getAddressList().then(res => { /* { list: Address[] } */ })
+SuperApp.openAddressPicker().then(addr => { /* 选中的 Address */ })
+SuperApp.requestPayment({ orderId, amount }).then(r => { /* { status: 'mock_paid', ... } */ })
 ```
 
 | 方法 | 说明 | 是否需表单声明权限 |
 | --- | --- | --- |
-| `getUserInfo` | 当前登录用户（不含 token） | 否 |
+| `getUserInfo` | 当前登录用户（不含 token）。未登录时宿主引导登录；该用户对该应用首次获取会弹出授权，确认后才返回 | 否 |
 | `close` | 关闭当前微应用页 | 否 |
+| `navigateTo` | 打开包内页面并压入历史，返回键能回到当前页。`url` 为相对路径 | 否 |
+| `redirectTo` | 关闭当前页再打开目标，返回键回不到被关掉的页 | 否 |
+| `reLaunch` | 关掉本微应用里已打开的全部页面，只留目标页 | 否 |
+| `navigateBack` | 返回上 `delta` 层（默认 1）。已经在入口则关闭微应用 | 否 |
 | `openMicroApp` | 按 appid 打开已上架微应用 | 否 |
 | `setTitle` | 改壳导航栏标题 | 否 |
 | `getEnterOptions` | 读取打开参数 | 否 |
+| `getDataSession` | 换取云函数调用凭证。未登录也可成功，凭证不含会员；已登录则带上 userId | 否 |
+| `getAddressList` | 当前用户收货地址列表 `{ list }`（需已登录） | 否 |
+| `openAddressPicker` | 宿主半屏选地址；选中 resolve，取消 reject；半屏内可新增 | 否 |
+| `requestPayment` | 支付占位，立即返回 `{ status: 'mock_paid' }` | 否 |
 
-开放平台预览无完整壳通道，上述方法会失败；请在 App 内验证。
+地址对象字段：`id` / `name` / `phone` / `province` / `city` / `district` / `address` / `isDefault`。下单优先 `openAddressPicker`；需自绘列表时用 `getAddressList`。
+
+开放平台预览无完整壳通道，上述方法会失败；请在 App 内验证。本地 `sa-mp preview` 调试壳已支持 `navigateTo`、`redirectTo`、`reLaunch`、`navigateBack`、`getDataSession`、`getAddressList`、`openAddressPicker`、`requestPayment`。云函数用 `SuperAppFn.call`（同会话），见 [app-data.md](app-data.md)。
 
 ## 2. 通用能力：tmuiJssdk
 
@@ -61,7 +79,7 @@ App 端按应用已声明权限拒绝调用为后续工作；上传时仍须声�
 | 内联脚本 | `<script>` 内联、`onclick=`、`eval` | 外置 `.js` + `addEventListener` |
 | Cookie 登录 | 页面写 Cookie | 用 `SuperApp.getUserInfo()` |
 | iframe | 禁止 | 内容写进页面 |
-| 外链跳转 | `window.open`、站外 `location` | 单页内切换；其它微应用用 `SuperApp.openMicroApp`；业务 API 走白名单域名 |
+| 外链跳转 | `window.open`、站外 `location`、hash 路由 | 包内页面用 `navigateTo` / `redirectTo` / `reLaunch`；其它微应用用 `SuperApp.openMicroApp`；业务 API 走白名单域名 |
 
 ## 6. 改写扫描清单
 

@@ -1,0 +1,7 @@
+{
+  "title": "应用后台",
+  "menus": [
+    { "title": "概览", "entry": "index.html" },
+    { "title": "示例列表", "entry": "demo.html" }
+  ]
+}

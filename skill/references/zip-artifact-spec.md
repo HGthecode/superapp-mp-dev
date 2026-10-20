@@ -8,23 +8,32 @@
 
 ```
 app.zip
-├── index.html        # 必需 — 入口，必须在根目录
-└── assets/
-    ├── style.css
-    ├── main.js
-    └── images/
+├── index.html          # 必需 — C 端入口，必须在根目录
+├── assets/             # C 端样式/脚本/图片
+│   ├── style.css
+│   ├── main.js
+│   └── images/
+└── admin/              # 可选 — 开放平台「控制台」页签（打进 zip）
+    ├── manifest.json
+    ├── index.html
+    ├── orders.html
+    └── assets/
+        └── orders.js
 ```
 
 | 路径 | 要求 |
 | --- | --- |
-| `index.html` | 必须在 zip 根目录 |
+| `index.html` | 必须在 zip 根目录（C 端） |
+| `admin/` | 可选；有则须含 `admin/index.html`；细则见 [console.md](console.md) |
 | 其余文件 | 自由组织，相对路径引用 |
 
 ### 禁止出现在 zip 内
 
 - `node_modules`、`.git`、`.DS_Store`
 - `*.map`、构建配置（`vite.config.*`、`webpack.config.*` 等）
+- `config.json`、`data/`、`functions/`（由 CLI 排除；虚拟表与云函数走 `sa-mp data/fn push`）
 - 多套一层目录导致 `index.html` 不在根（错误：`app/index.html`）
+- 把 Element Plus / VXE / vue-ui-plus 源码打进 zip（须用 `__SUPER_APP_STATIC__/mp/...`）
 
 ### 打包方式
 
@@ -51,7 +60,15 @@ zip -r app.zip dist
 | base | 不使用 | `<base href="...">` |
 | 平台共享库 | `__SUPER_APP_STATIC__/mp/...`、`__SUPER_APP_STATIC__/tmuijssdk/...` | 写死 `http://...` 域名（换环境会挂） |
 | 其它静态外链 | 下载后打进 zip | `https://cdn...` |
-| 单页 | 一个 `index.html`，视图 JS 切换 | 多 HTML 站点 |
+| 多页面 | 每个页面独立 `.html`，`SuperApp` 跳转 | 一个 html 里用 hash / `v-if` 切换整页 |
+
+### 多页面
+
+`index.html` 只是入口。有多个业务页面时，每个页面一个 html（根目录或 `pages/`），样式和脚本放 `./assets/` 共用。
+
+禁止单文件 hash 路由、禁止用 `v-if` 切换整页。那种做法没有独立历史记录，返回键没法回到上一页，也做不到「关掉当前页再跳」和「清空页面栈再跳」。
+
+页面间只走 `SuperApp` 跳转（见 [device-capabilities.md](device-capabilities.md)）。禁止 `location.href`、`location.hash` 当路由、`window.open`。
 
 脚本必须外置：容器 CSP 的 `script-src` 不含 `unsafe-inline`（含 `unsafe-eval` 仅供壳通道 tmuiJssdk，业务代码仍禁止自用）。禁止内联 `<script>...</script>`、行内事件 `onclick=`、`javascript:` URI。
 
@@ -94,15 +111,20 @@ sa-mp create ./my-h5-app
 </html>
 ```
 
-托管时 `__SUPER_APP_STATIC__` 替换为配置 `platform_static_base_url`（换环境只改服务端配置）。完整示例见 skill 内 `templates/vanilla/`。
+托管时 `__SUPER_APP_STATIC__` 替换为配置 `platform_static_base_url`（换环境只改服务端配置）。完整示例见 skill 内 `templates/vanilla/`（含 `admin/` 起步）。
+
+控制台页面模板与依赖顺序见 [console.md](console.md)，不要把 Admin 库打进 zip。
 
 ## 5. 打包前自检
 
 - [ ] `index.html` 在 zip 根目录，未多套一层目录
+- [ ] 多页面是多个 html；无 hash 路由、无单文件整页 `v-if`
 - [ ] 仅含支持的文件类型，无开发垃圾文件
-- [ ] 包内资源为相对路径 `./`，无以 `/` 开头的路径，无 `<base href>`
-- [ ] 平台库用 `__SUPER_APP_STATIC__/mp|tmuijssdk/...`，无写死域名
-- [ ] 已引用 Vue + Vant + `superapp-ui`，未把框架打进 zip
+- [ ] 包内资源为相对路径 `./`，无以 `/` 开头的路径，无自写 `<base href>`
+- [ ] 平台库用 `__SUPER_APP_STATIC__/mp|tmuijssdk/...`，无写死域名、无公网 CDN
+- [ ] C 端已引用 Vue + Vant + `superapp-ui`，未把框架打进 zip
+- [ ] 若有 `admin/`：含 `index.html`；依赖顺序正确；未打进 Element Plus/VXE；菜单 `entry` 为相对 `.html`
+- [ ] 无 `data/`、`functions/`、`config.json` 进 zip
 - [ ] 脚本全部外置：无内联 script、无行内事件、无 eval / new Function
 - [ ] 无 iframe / object、无自建 CSP meta
 - [ ] 推荐总包 < 20MB；单图 < 500KB

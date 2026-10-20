@@ -38,6 +38,7 @@ const PKG = (() => {
 
 const SKIP_NAMES = new Set(['.git', '.DS_Store', 'node_modules', 'Thumbs.db'])
 const PACK_SKIP_REL = new Set(['config.json'])
+const PACK_SKIP_PREFIX = ['data/', 'functions/']
 const SKILL_DIR_NAME = 'super-app-mp-dev'
 const DEFAULT_SKILL_SOURCE = 'https://github.com/HGthecode/superapp-mp-dev.git'
 const DEFAULT_STATIC_BASE = 'http://localhost:8900/static'
@@ -74,6 +75,7 @@ function printUsage() {
   sa-mp create [目录] [--force] [--appid xxx]
   sa-mp init [--appid xxx]
   sa-mp preview [--port 5179] [--appid xxx] [--dir 目录] [--no-open]
+  sa-mp console [--port 5180] [--appid xxx] [--dir 目录] [--no-open]
   sa-mp pack [-o out.zip] [--dir 目录]
   sa-mp next-version [--appid xxx]
   sa-mp submit [--version x.y.z] [--changelog 描述] [--yes] [--appid xxx] [--dir 目录]
@@ -82,11 +84,18 @@ function printUsage() {
   sa-mp skill install [--target cursor|codex|dsh|cwd]... [--path 目录]... [--force]
   sa-mp skill update
   sa-mp skill status
+  sa-mp data pull [--appid xxx] [--dir 目录]
+  sa-mp data push [--appid xxx] [--dir 目录] [--publish]
+  sa-mp data diff [--appid xxx] [--dir 目录]
+  sa-mp fn pull [--appid xxx] [--dir 目录]
+  sa-mp fn push [--appid xxx] [--dir 目录] [--publish]
+  sa-mp fn list [--appid xxx] [--dir 目录]
   sa-mp doctor
   sa-mp upgrade
   sa-mp --help | --version
 
 在含 index.html 的应用目录执行时，可省略 --dir；appid 默认读 config.json。
+data/schema.json、functions/*.js 不打进 zip，需 API Key 含 data:schema。
 `)
 }
 
@@ -118,11 +127,20 @@ function legacyConfigPath() {
   return join(homedir(), '.halos', 'mp.json')
 }
 
+function readJsonFile(path, fallback) {
+  try {
+    const text = readFileSync(path, 'utf8').replace(/^\uFEFF/, '')
+    return JSON.parse(text)
+  } catch {
+    return fallback
+  }
+}
+
 function loadConfig() {
   const p = configPath()
-  if (existsSync(p)) return JSON.parse(readFileSync(p, 'utf8'))
+  if (existsSync(p)) return readJsonFile(p, { baseUrl: '', apiKey: '', skillTargets: [] })
   const legacy = legacyConfigPath()
-  if (existsSync(legacy)) return JSON.parse(readFileSync(legacy, 'utf8'))
+  if (existsSync(legacy)) return readJsonFile(legacy, { baseUrl: '', apiKey: '', skillTargets: [] })
   return { baseUrl: '', apiKey: '', skillTargets: [] }
 }
 
@@ -207,11 +225,7 @@ function resolveProjectDir(args) {
 function readProjectConfig(dir) {
   const p = join(dir, 'config.json')
   if (!existsSync(p)) return {}
-  try {
-    return JSON.parse(readFileSync(p, 'utf8'))
-  } catch {
-    return {}
-  }
+  return readJsonFile(p, {})
 }
 
 function writeProjectConfig(dir, data) {
@@ -279,6 +293,7 @@ function walkFiles(dir, base = dir, list = []) {
       const rel = relative(base, full).split(sep).join('/')
       if (rel.toLowerCase().endsWith('.zip') || rel.toLowerCase().endsWith('.map')) continue
       if (PACK_SKIP_REL.has(rel)) continue
+      if (PACK_SKIP_PREFIX.some((p) => rel === p.slice(0, -1) || rel.startsWith(p))) continue
       list.push({ rel, full })
     }
   }
@@ -450,11 +465,7 @@ function resolveSkillBodyDir() {
 function loadContentMeta() {
   const p = contentMetaPath()
   if (!existsSync(p)) return null
-  try {
-    return JSON.parse(readFileSync(p, 'utf8'))
-  } catch {
-    return null
-  }
+  return readJsonFile(p, null)
 }
 
 function saveContentMeta(meta) {
@@ -802,7 +813,7 @@ async function cmdCreate(argv) {
   writeProjectConfig(abs, { appid })
   console.log(`已生成无构建微应用: ${abs}`)
   console.log(`模板来源: ${tpl.source}`)
-  console.log('入口: index.html（平台 Vue + Vant，无需 npm install）')
+  console.log('入口: index.html（C 端 Vue + Vant）；控制台: admin/（sa-mp console）')
 }
 
 async function cmdConfig(argv) {
@@ -858,11 +869,14 @@ function buildEnvJS(apiOrigin, staticBase) {
 
 const LIVE_RELOAD_JS = `(()=>{try{var es=new EventSource('/__sa_reload');es.onmessage=function(){location.reload()};es.onerror=function(){}}catch(e){}})();`
 
-function transformPreviewHtml(html, localStaticBase) {
+function transformPreviewHtml(html, localStaticBase, adminPage) {
   let out = html.split('__SUPER_APP_STATIC__').join(localStaticBase)
-  const baseTag = '<base href="/">'
-  const envTag = '<script src="./__superapp_env.js"></script>'
-  const liveTag = '<script src="./__sa_livereload.js"></script>'
+  // admin 页面脚本是相对 html 的 ./assets，base 必须停在 /admin/，否则会落到 C 端 /assets
+  const baseTag = `<base href="${adminPage ? '/admin/' : '/'}">`
+  const envSrc = adminPage ? '/__superapp_env.js' : './__superapp_env.js'
+  const liveSrc = adminPage ? '/__sa_livereload.js' : './__sa_livereload.js'
+  const envTag = `<script src="${envSrc}"></script>`
+  const liveTag = `<script src="${liveSrc}"></script>`
   if (out.includes('<head>')) out = out.replace('<head>', `<head>${baseTag}`)
   else out = baseTag + out
   if (out.includes('</head>')) out = out.replace('</head>', `${envTag}${liveTag}</head>`)
@@ -903,11 +917,13 @@ async function proxyPlatformStatic(req, res, pathname, upstreamStaticBase, csp) 
       upstreamRes.headers.get('content-type') ||
       MIME[extname(rel).toLowerCase()] ||
       'application/octet-stream'
-    res.writeHead(upstreamRes.status, {
+    const headers = {
       'Content-Type': ctype,
       'Content-Security-Policy': csp,
       'Cache-Control': 'no-store',
-    })
+    }
+    allowOpaqueOriginCORS(req, headers)
+    res.writeHead(upstreamRes.status, headers)
     res.end(buf)
   } catch (e) {
     res.writeHead(502)
@@ -931,13 +947,42 @@ function openBrowser(url) {
   else exec(`xdg-open "${url.replace(/"/g, '')}"`)
 }
 
-async function cmdPreview(argv) {
+function allowConsoleManifestCORS(req, headers, openWebBase) {
+  const origin = String(req.headers.origin || '')
+  if (!origin) return
+  let ok = false
+  try {
+    const from = new URL(origin)
+    const open = new URL(openWebBase)
+    const loopback = from.hostname === '127.0.0.1' || from.hostname === 'localhost'
+    ok = from.origin === open.origin || (loopback && (from.port === '9174' || from.port === open.port))
+  } catch {
+    ok = false
+  }
+  if (!ok) return
+  headers['Access-Control-Allow-Origin'] = origin
+  headers.Vary = 'Origin'
+}
+
+/** 控制台 iframe 带 sandbox 且无 allow-same-origin，文档源为 null，跨域脚本必须回显该源 */
+function allowOpaqueOriginCORS(req, headers) {
+  if (String(req.headers.origin || '') !== 'null') return
+  headers['Access-Control-Allow-Origin'] = 'null'
+  headers.Vary = 'Origin'
+}
+
+async function cmdPreview(argv, mode) {
+  const consoleMode = mode === 'console'
   const args = parseArgs(argv)
   const abs = resolveProjectDir(args)
   if (!existsSync(join(abs, 'index.html'))) {
     throw new Error(`目录根缺少 index.html: ${abs}`)
   }
-  const port = Number(args.port && args.port !== true ? args.port : 5179) || 5179
+  if (consoleMode && !existsSync(join(abs, 'admin', 'index.html'))) {
+    console.warn('[console] 未找到 admin/index.html，控制台页会是空态')
+  }
+  const defaultPort = consoleMode ? 5180 : 5179
+  const port = Number(args.port && args.port !== true ? args.port : defaultPort) || defaultPort
   const appid = resolveAppid(args, abs)
   const { staticBase: upstreamStaticBase, openWebBase, apiOrigin } = loadPreviewConfig(args)
   const localStaticBase = LOCAL_STATIC_PREFIX
@@ -967,40 +1012,55 @@ async function cmdPreview(argv) {
       try {
         const u = new URL(req.url || '/', `http://127.0.0.1:${port}`)
         let pathname = u.pathname
+        if (req.method === 'OPTIONS') {
+          const headers = { 'Cache-Control': 'no-store' }
+          allowOpaqueOriginCORS(req, headers)
+          if (pathname === '/admin/manifest.json') allowConsoleManifestCORS(req, headers, openWebBase)
+          res.writeHead(204, headers)
+          res.end()
+          return
+        }
         if (pathname === LOCAL_STATIC_PREFIX || pathname.startsWith(LOCAL_STATIC_PREFIX + '/')) {
           await proxyPlatformStatic(req, res, pathname, upstreamStaticBase, csp)
           return
         }
         if (pathname === '/__sa_reload') {
-          res.writeHead(200, {
+          const headers = {
             'Content-Type': 'text/event-stream; charset=utf-8',
             'Cache-Control': 'no-store',
             Connection: 'keep-alive',
-          })
+          }
+          allowOpaqueOriginCORS(req, headers)
+          res.writeHead(200, headers)
           res.write(': ok\n\n')
           reloadClients.add(res)
           req.on('close', () => reloadClients.delete(res))
           return
         }
         if (pathname === '/__sa_livereload.js') {
-          res.writeHead(200, {
+          const headers = {
             'Content-Type': 'application/javascript; charset=utf-8',
             'Content-Security-Policy': csp,
             'Cache-Control': 'no-store',
-          })
+          }
+          allowOpaqueOriginCORS(req, headers)
+          res.writeHead(200, headers)
           res.end(LIVE_RELOAD_JS)
           return
         }
         if (pathname === '/__superapp_env.js') {
-          res.writeHead(200, {
+          const headers = {
             'Content-Type': 'application/javascript; charset=utf-8',
             'Content-Security-Policy': csp,
             'Cache-Control': 'no-store',
-          })
+          }
+          allowOpaqueOriginCORS(req, headers)
+          res.writeHead(200, headers)
           res.end(envJs)
           return
         }
         if (pathname.endsWith('/')) pathname += 'index.html'
+        const manifestCORS = pathname === '/admin/manifest.json'
         let filePath = safeJoinWww(abs, pathname)
         if (!filePath) {
           res.writeHead(403)
@@ -1022,8 +1082,11 @@ async function cmdPreview(argv) {
           'Content-Security-Policy': csp,
           'Cache-Control': 'no-store',
         }
+        allowOpaqueOriginCORS(req, headers)
+        if (manifestCORS) allowConsoleManifestCORS(req, headers, openWebBase)
         if (ext === '.html') {
-          const html = transformPreviewHtml(readFileSync(filePath, 'utf8'), localStaticBase)
+          const adminPage = filePath.includes(`${sep}admin${sep}`)
+          const html = transformPreviewHtml(readFileSync(filePath, 'utf8'), localStaticBase, adminPage)
           res.writeHead(200, headers)
           res.end(html)
           return
@@ -1062,7 +1125,13 @@ async function cmdPreview(argv) {
   console.log(`项目目录: ${abs}`)
   console.log(`静态上游: ${upstreamStaticBase} → 同源 ${localStaticBase}/`)
   console.log('文件变更后自动刷新 iframe（无需重启 preview）')
-  if (appid) {
+  if (appid && consoleMode) {
+    const debugUrl =
+      `${openWebBase}/microApps/console?appid=${encodeURIComponent(appid)}` +
+      `&debug=${encodeURIComponent(localUrl + 'admin/')}`
+    console.log(`控制台调试（需已登录开放平台）: ${debugUrl}`)
+    if (!args['no-open']) openBrowser(debugUrl)
+  } else if (appid) {
     const debugUrl =
       `${openWebBase}/mp/debug?appid=${encodeURIComponent(appid)}` +
       `&url=${encodeURIComponent(localUrl)}`
@@ -1223,6 +1292,172 @@ async function cmdUpgrade() {
   console.log('CLI 已更新。Skill / 模板请执行: sa-mp skill update')
 }
 
+function schemaPath(projectDir) {
+  return join(projectDir, 'data', 'schema.json')
+}
+
+function readLocalSchema(projectDir) {
+  const p = schemaPath(projectDir)
+  if (!existsSync(p)) return { tables: [] }
+  return JSON.parse(readFileSync(p, 'utf8'))
+}
+
+function writeLocalSchema(projectDir, schema) {
+  const dir = join(projectDir, 'data')
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+  writeFileSync(schemaPath(projectDir), JSON.stringify(schema, null, 2) + '\n', 'utf8')
+}
+
+async function cmdData(argv) {
+  const sub = argv[0]
+  const args = parseArgs(argv.slice(1))
+  const projectDir = resolveProjectDir(args)
+  const cfg = loadConfig()
+  if (!cfg.baseUrl || !cfg.apiKey) throw new Error('请先 sa-mp config set --base-url ... --api-key ...')
+  const appid = resolveAppid(args, projectDir)
+  if (!appid) throw new Error('缺少 appid（config.json 或 --appid）')
+
+  if (sub === 'pull') {
+    const remote = await postJSON(cfg, '/data/schema/pull', { appid })
+    writeLocalSchema(projectDir, {
+      appid: remote.appid || appid,
+      backend: remote.backend || 'managed',
+      tables: remote.tables || [],
+    })
+    console.log(`已写入 ${schemaPath(projectDir)}（${(remote.tables || []).length} 张表）`)
+    return
+  }
+  if (sub === 'push') {
+    const local = readLocalSchema(projectDir)
+    const tables = (local.tables || []).map((t) => ({
+      ...t,
+      fields: (t.fields || []).map((f) => ({
+        ...f,
+        clientReadable: f.clientReadable !== false,
+        clientWritable: f.clientWritable !== false,
+      })),
+    }))
+    const remote = await postJSON(cfg, '/data/schema/push', {
+      appid,
+      tables,
+      publish: !!args.publish,
+    })
+    writeLocalSchema(projectDir, {
+      appid: remote.appid || appid,
+      backend: remote.backend || 'managed',
+      tables: remote.tables || tables,
+    })
+    console.log(`已推送 ${(remote.tables || tables).length} 张表${args.publish ? '并发布' : ''}`)
+    return
+  }
+  if (sub === 'diff') {
+    const local = readLocalSchema(projectDir)
+    const diff = await postJSON(cfg, '/data/schema/diff', {
+      appid,
+      tables: local.tables || [],
+    })
+    console.log(diff.summary || JSON.stringify(diff, null, 2))
+    if (diff.addedTables?.length) console.log('added:', diff.addedTables.join(', '))
+    if (diff.removedTables?.length) console.log('removed:', diff.removedTables.join(', '))
+    if (diff.changedTables?.length) console.log('changed:', diff.changedTables.join(', '))
+    return
+  }
+  throw new Error('用法: sa-mp data pull|push|diff')
+}
+
+function functionsDir(projectDir) {
+  return join(projectDir, 'functions')
+}
+
+function listLocalFunctions(projectDir) {
+  const dir = functionsDir(projectDir)
+  if (!existsSync(dir)) return []
+  const metaPath = join(dir, 'meta.json')
+  let meta = {}
+  if (existsSync(metaPath)) {
+    try {
+      meta = JSON.parse(readFileSync(metaPath, 'utf8')) || {}
+    } catch {
+      meta = {}
+    }
+  }
+  const byName = meta.functions || meta || {}
+  return readdirSync(dir)
+    .filter((f) => f.endsWith('.js'))
+    .map((f) => {
+      const name = f.replace(/\.js$/, '')
+      const source = readFileSync(join(dir, f), 'utf8')
+      const m = byName[name] || {}
+      return {
+        name,
+        title: m.title || name,
+        description: m.description || '',
+        auth: m.auth || 'auth',
+        timeoutMs: m.timeoutMs || 3000,
+        source,
+      }
+    })
+}
+
+function writeLocalFunctions(projectDir, list) {
+  const dir = functionsDir(projectDir)
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+  const meta = { functions: {} }
+  for (const fn of list || []) {
+    const name = fn.name
+    if (!name) continue
+    writeFileSync(join(dir, `${name}.js`), fn.source || '', 'utf8')
+    meta.functions[name] = {
+      title: fn.title || name,
+      description: fn.description || '',
+      auth: fn.auth || 'auth',
+      timeoutMs: fn.timeoutMs || 3000,
+    }
+  }
+  writeFileSync(join(dir, 'meta.json'), JSON.stringify(meta, null, 2) + '\n', 'utf8')
+}
+
+async function cmdFn(argv) {
+  const sub = argv[0]
+  const args = parseArgs(argv.slice(1))
+  const projectDir = resolveProjectDir(args)
+  const cfg = loadConfig()
+  if (!cfg.baseUrl || !cfg.apiKey) throw new Error('请先 sa-mp config set --base-url ... --api-key ...')
+  const appid = resolveAppid(args, projectDir)
+  if (!appid) throw new Error('缺少 appid（config.json 或 --appid）')
+
+  if (sub === 'pull') {
+    const remote = await postJSON(cfg, '/data/fn/pull', { appid })
+    writeLocalFunctions(projectDir, remote.list || [])
+    console.log(`已写入 ${functionsDir(projectDir)}（${(remote.list || []).length} 个函数）`)
+    return
+  }
+  if (sub === 'push') {
+    const functions = listLocalFunctions(projectDir)
+    if (!functions.length) throw new Error('functions/ 下没有 .js 文件')
+    const remote = await postJSON(cfg, '/data/fn/push', {
+      appid,
+      functions,
+      publish: !!args.publish,
+    })
+    console.log(`已推送 ${(remote.list || functions).length} 个函数${args.publish ? '并发布' : ''}`)
+    return
+  }
+  if (sub === 'list') {
+    const remote = await postJSON(cfg, '/data/fn/list', { appid })
+    const list = remote.list || []
+    if (!list.length) {
+      console.log('(无函数)')
+      return
+    }
+    for (const f of list) {
+      console.log(`${f.name}\tstatus=${f.status}\tauth=${f.auth}\ttimeout=${f.timeoutMs}ms`)
+    }
+    return
+  }
+  throw new Error('用法: sa-mp fn pull|push|list')
+}
+
 async function main() {
   const argv = process.argv.slice(2)
   if (!argv.length || argv[0] === 'help' || argv[0] === '-h' || argv[0] === '--help') {
@@ -1240,8 +1475,11 @@ async function main() {
     else if (cmd === 'config') await cmdConfig(argv.slice(1))
     else if (cmd === 'pack') await cmdPack(argv.slice(1))
     else if (cmd === 'preview') await cmdPreview(argv.slice(1))
+    else if (cmd === 'console') await cmdPreview(argv.slice(1), 'console')
     else if (cmd === 'next-version') await cmdNextVersion(argv.slice(1))
     else if (cmd === 'submit') await cmdSubmit(argv.slice(1))
+    else if (cmd === 'data') await cmdData(argv.slice(1))
+    else if (cmd === 'fn') await cmdFn(argv.slice(1))
     else if (cmd === 'skill') await cmdSkill(argv.slice(1))
     else if (cmd === 'doctor') await cmdDoctor()
     else if (cmd === 'upgrade') await cmdUpgrade()

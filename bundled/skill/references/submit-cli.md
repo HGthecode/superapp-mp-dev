@@ -38,6 +38,7 @@ sa-mp init --appid mpxxxxxxxx
 ```bash
 sa-mp create ./my-h5-app
 sa-mp preview
+sa-mp console
 sa-mp pack
 sa-mp next-version
 sa-mp submit --changelog "修复滚动" --yes
@@ -45,11 +46,12 @@ sa-mp submit --changelog "修复滚动" --yes
 
 | 命令 | 作用 |
 | --- | --- |
-| `create [目录]` | 生成无构建起步目录（平台 Vue + Vant） |
+| `create [目录]` | 生成无构建起步目录（C 端 Vue/Vant + `admin/` 控制台起步） |
 | `init [--appid]` | 写 `config.json` |
 | `config set / show` | 本机 base-url、api-key、skill-source |
 | `pack [-o out.zip]` | 打 zip（排除 `config.json`） |
 | `preview` | 本地 serve + 打开 `/mp/debug` |
+| `console` | 本地 serve `admin/`（默认 5180）+ 打开已登录的控制台页 |
 | `next-version` | 建议下一版本号 |
 | `submit [--version] [--changelog] [--yes]` | 打包并上传检测 |
 | `skill install / update / status` | 安装 / 更新 AI Skill |
@@ -65,6 +67,8 @@ sa-mp config set --static-base http://localhost:8900/static --open-web-base http
 ```
 
 调试壳：`{openWebBase}/mp/debug?appid=...&url=http://127.0.0.1:{port}/`
+
+控制台调试见 [console.md](console.md)：`sa-mp console` 打开 `{openWebBase}/microApps/console?appid=...&debug=http://127.0.0.1:{port}/admin/`。
 
 ## AI 提交流程（强制）
 

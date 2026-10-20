@@ -16,10 +16,15 @@
 | `__SUPER_APP_STATIC__/tmuijssdk/tmuiJssdk1.0.0.min.js` | … |
 | `__SUPER_APP_STATIC__/mp/super-app-jssdk.1.0.0.js` | … |
 | `__SUPER_APP_STATIC__/mp/super-app-open.1.0.0.js` | … |
+| `__SUPER_APP_STATIC__/mp/super-app-data.1.0.0.js` | 虚拟表运行时 SDK |
+| `__SUPER_APP_STATIC__/mp/super-app-fn.1.0.0.js` | 云函数调用 SDK（`SuperAppFn.call`） |
+| `__SUPER_APP_STATIC__/mp/admin-ui.1.0.0.js` | 控制台薄封装（`SuperAppAdmin`，需先加载下方 Admin 依赖） |
+
+控制台（`admin/`）额外依赖（顺序见 [console.md](console.md)）：`element-plus.*`、`vxe-pc-ui.*`、`vxe-table.*`、`vxe-plugin-render-element.*.css`、`vue-ui-plus.*`、`xe-utils.*`、`dayjs.*`。
 
 仅允许 `__SUPER_APP_STATIC__/mp/` 与 `__SUPER_APP_STATIC__/tmuijssdk/`。换测试/正式域名只改服务端配置，不必重打包。
 
-API 网关由托管页自动注入 `./__superapp_env.js`（`window.__SUPER_APP_API_ORIGIN__`），`SuperAppOpen` 会优先读取，无需在业务代码写死。
+API 网关由托管页自动注入 `./__superapp_env.js`（`window.__SUPER_APP_API_ORIGIN__`），`SuperAppOpen` / `SuperAppData` 会优先读取，无需在业务代码写死。
 
 ## 兼容：绝对 URL 白名单
 
@@ -40,6 +45,8 @@ API 网关由托管页自动注入 `./__superapp_env.js`（`window.__SUPER_APP_A
 <script src="__SUPER_APP_STATIC__/mp/vant.4.9.21.min.js" crossorigin></script>
 <script src="./assets/main.js"></script>
 ```
+
+控制台页面依赖顺序与 `SuperAppAdmin` 用法见 [console.md](console.md)，不要与 C 端 Vant 混在同一 html。
 
 ## 标准 UI（Vue 3 + Vant 4）
 
@@ -67,11 +74,15 @@ API 网关由托管页自动注入 `./__superapp_env.js`（`window.__SUPER_APP_A
 
 | 方法 | 说明 |
 | --- | --- |
-| `SuperApp.getUserInfo()` | 当前登录用户：`id` / `nickname` / `avatar` / `phone` / `code`（无 token） |
+| `SuperApp.getUserInfo()` | 当前登录用户：`id` / `nickname` / `avatar` / `phone` / `code`（无 token）。未登录由宿主引导登录；首次按用户+应用授权 |
 | `SuperApp.close()` | 关闭当前微应用页 |
 | `SuperApp.openMicroApp({ appid, query })` | 打开另一个已上架微应用 |
 | `SuperApp.setTitle(title)` | 改壳导航栏标题 |
 | `SuperApp.getEnterOptions()` | 本次打开的 `{ appid, query }` |
+| `SuperApp.getDataSession({ appid?, env? })` | 换取云函数调用凭证。未登录返回匿名凭证；已登录凭证含会员 |
+| `SuperApp.getAddressList()` | 收货地址列表 `{ list: Address[] }`（需登录） |
+| `SuperApp.openAddressPicker()` | 宿主半屏选地址（可内嵌新增）；选中返回 Address |
+| `SuperApp.requestPayment({ orderId, amount })` | 支付占位，返回 `{ status: 'mock_paid' }` |
 
 选图、缓存等走 `tmuiJssdk.*`。开放平台预览无完整壳通道，请在 App 内验证。
 
@@ -82,13 +93,22 @@ API 网关由托管页自动注入 `./__superapp_env.js`（`window.__SUPER_APP_A
 SuperAppOpen.request('/microApps/catalog/pageList', { pageIndex: 0, pageSize: 20 })
 ```
 
-勿在 zip 内写死 `apiOrigin`。虚拟表等接口后续再扩展。
+勿在 zip 内写死 `apiOrigin`。
+
+## SuperAppData / SuperAppFn
+
+需要服务端存业务数据时，先读 [app-data.md](app-data.md)：维护 `data/schema.json` 与 `functions/meta.json`，`sa-mp data push --publish`、`sa-mp fn push --publish`。页面只用 `SuperAppFn.call`，不要直连虚拟表增删改查。
+
+```html
+<script src="__SUPER_APP_STATIC__/mp/super-app-data.1.0.0.js" crossorigin></script>
+<script src="__SUPER_APP_STATIC__/mp/super-app-fn.1.0.0.js" crossorigin></script>
+```
 
 ## 自检
 
 - [ ] 平台库用 `__SUPER_APP_STATIC__/mp|tmuijssdk/...`，无写死域名
 - [ ] 已引用 Vue + Vant + `superapp-ui`，无第二套 UI、无公网 CDN
-- [ ] 脚本顺序：`tmuiJssdk` → `super-app-jssdk` → `super-app-open` → `vue` → `vant` → 业务 `main.js`
+- [ ] 脚本顺序：`tmuiJssdk` → `super-app-jssdk` → `super-app-open`（可选 `super-app-data` / `super-app-fn`）→ `vue` → `vant` → 业务 `main.js`
 - [ ] 布局用 Tailwind；组件用 Vant；换肤只改 CSS 变量
 - [ ] 业务交互走 `SuperApp.*`；页面提示走 `vant.showToast` 等
-- [ ] 开放平台请求走 `SuperAppOpen.request`
+- [ ] 开放平台请求走 `SuperAppOpen.request`；微应用数据走 `SuperAppFn`
