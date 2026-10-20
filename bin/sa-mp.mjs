@@ -37,7 +37,7 @@ const PKG = (() => {
 })()
 
 const SKIP_NAMES = new Set(['.git', '.DS_Store', 'node_modules', 'Thumbs.db'])
-const PACK_SKIP_REL = new Set(['config.json'])
+const PACK_SKIP_REL = new Set(['config.json', 'README.md'])
 const PACK_SKIP_PREFIX = ['data/', 'functions/']
 const SKILL_DIR_NAME = 'super-app-mp-dev'
 const DEFAULT_SKILL_SOURCE = 'https://github.com/HGthecode/superapp-mp-dev.git'

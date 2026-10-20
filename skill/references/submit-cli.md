@@ -21,7 +21,7 @@ SUPER_APP_API_KEY=sa_...
 
 ## 项目配置
 
-应用根目录（与 `index.html` 同级）放置 `config.json`（进 git，打包时排除）：
+应用根目录（与 `index.html` 同级）放置 `config.json`、`README.md`（均进 git，打包时排除）。开发前确认见 [project-brief.md](project-brief.md)。`config.json` 示例：
 
 ```json
 { "appid": "mpxxxxxxxx" }

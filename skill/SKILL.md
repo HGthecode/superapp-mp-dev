@@ -7,7 +7,7 @@ description: >-
   打包 zip、用全局 CLI sa-mp（Node 18+）本地 preview/console/提交版本、
   处理路径/CSP/平台共享库/JSBridge/业务域名/虚拟表与 auth:open 云函数时使用。
 metadata:
-  version: "2.1.0"
+  version: "2.2.0"
 ---
 
 # SuperApp 托管 H5 ZIP 构建指南
@@ -24,6 +24,12 @@ metadata:
 目标产物：可直接上传的 **`.zip` 静态包**，或经 CLI 直接提交（提交时直接打包目录，不跑 Vite）。
 
 开发者须已全局安装 CLI：`npm install -g sa-mp`，并用 `sa-mp skill install` 把本 Skill 挂到 AI 工具。
+
+## 强制：开发前先确认并写入 README
+
+**新建、从零改写、或新增一整块业务之前**，禁止直接写代码 / `create` / 改 schema / `push`。必须先读 [project-brief.md](references/project-brief.md)，按其中**必问清单**与开发者确认（应用名、简介、主题三色、C 端功能、是否要控制台、登录与数据等），汇总请其回复「确认」后，写入应用根目录 **`README.md`**，再进入后续步骤。
+
+仅改文案、修 bug、调已有样式且不扩大功能范围时，可跳过；但若改主题色或增删功能模块，须先更新 `README.md` 并经确认。
 
 ## 强制：复杂需求先出计划再动手
 
@@ -48,7 +54,7 @@ metadata:
 
 ## 何时使用
 
-- 从零新建托管 H5（优先 `sa-mp create`，含 C 端 + 可选 `admin/` 起步）并打包成 `.zip`
+- 从零新建托管 H5——**先**走 [project-brief.md](references/project-brief.md)，再 `sa-mp create`（含 C 端 + `admin/` 起步）并打包成 `.zip`
 - 将已有 H5 改写为平台规范并打包
 - 用户说「本地预览 / H5 调试」——`sa-mp preview`（`/mp/debug`，默认 5179）
 - 用户说「控制台 / admin / 后台 / 发货管理」——先读 [console.md](references/console.md)，用 `sa-mp console`（默认 5180）
@@ -59,8 +65,9 @@ metadata:
 
 每一步动手前必须先读对应 reference 并严格遵守：
 
+0. **开发前确认** — 先读 [project-brief.md](references/project-brief.md)；必问齐全 → 开发者确认 → 写入根目录 `README.md`（未完成禁止继续）
 1. **平台共享库** — 先读 [platform-libs.md](references/platform-libs.md)（C 端 Vue/Vant；控制台见 Admin 依赖）
-2. **新建目录** — `sa-mp create <目录>` 或空目录 `sa-mp create`；再读 [zip-artifact-spec.md](references/zip-artifact-spec.md)
+2. **新建目录** — `sa-mp create <目录>` 或空目录 `sa-mp create`；再读 [zip-artifact-spec.md](references/zip-artifact-spec.md)；用已确认内容覆盖模板里的 `README.md`
 3. **项目配置** — `sa-mp init --appid mp...`
 4. **本地预览（C 端）** — `sa-mp preview`（`/mp/debug` + 本地 iframe，默认 `preview` 数据环境）
 5. **控制台（按需）** — 先读 [console.md](references/console.md)；维护 `admin/` + `auth: open` 云函数；本地 `sa-mp console`（与 preview 可同时开）
@@ -75,6 +82,7 @@ metadata:
 
 | 文档 | 何时读 |
 | --- | --- |
+| [project-brief.md](references/project-brief.md) | **最先**：必问清单、确认话术、`README.md` 模板 |
 | [platform-libs.md](references/platform-libs.md) | Tailwind、Vue、Vant、Admin 依赖、`SuperApp*` |
 | [zip-artifact-spec.md](references/zip-artifact-spec.md) | 目录结构（含 `admin/`）、相对路径、模板、打包自检 |
 | [device-capabilities.md](references/device-capabilities.md) | 壳业务方法、相册/相机/麦克风、禁止能力 |

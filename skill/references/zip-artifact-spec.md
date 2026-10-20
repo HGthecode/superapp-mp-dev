@@ -31,7 +31,7 @@ app.zip
 
 - `node_modules`、`.git`、`.DS_Store`
 - `*.map`、构建配置（`vite.config.*`、`webpack.config.*` 等）
-- `config.json`、`data/`、`functions/`（由 CLI 排除；虚拟表与云函数走 `sa-mp data/fn push`）
+- `config.json`、`README.md`、`data/`、`functions/`（由 CLI 排除；简介与主题写在 README；虚拟表与云函数走 `sa-mp data/fn push`）
 - 多套一层目录导致 `index.html` 不在根（错误：`app/index.html`）
 - 把 Element Plus / VXE / vue-ui-plus 源码打进 zip（须用 `__SUPER_APP_STATIC__/mp/...`）
 
@@ -124,7 +124,7 @@ sa-mp create ./my-h5-app
 - [ ] 平台库用 `__SUPER_APP_STATIC__/mp|tmuijssdk/...`，无写死域名、无公网 CDN
 - [ ] C 端已引用 Vue + Vant + `superapp-ui`，未把框架打进 zip
 - [ ] 若有 `admin/`：含 `index.html`；依赖顺序正确；未打进 Element Plus/VXE；菜单 `entry` 为相对 `.html`
-- [ ] 无 `data/`、`functions/`、`config.json` 进 zip
+- [ ] 无 `data/`、`functions/`、`config.json`、`README.md` 进 zip
 - [ ] 脚本全部外置：无内联 script、无行内事件、无 eval / new Function
 - [ ] 无 iframe / object、无自建 CSP meta
 - [ ] 推荐总包 < 20MB；单图 < 500KB
