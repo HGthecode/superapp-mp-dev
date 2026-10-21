@@ -14,14 +14,24 @@ npm install -g sa-mp
 开发者只需装这一次 CLI。Skill 与 create 模板通过命令安装 / 更新，不必再手工拷贝 Skill 目录。
 
 ```bash
-# 把 Skill 挂到常用 AI 工具（可多选；优先软链 / Windows 目录联接）
-sa-mp skill install --target cursor --target codex --target dsh
+# 列出可用 Skill
+sa-mp skill list
 
-# 或挂到当前项目
-sa-mp skill install --target cwd
+# 交互选择 Skill + 挂载目标
+sa-mp skill install
+
+# 安装指定 Skill（可多选名称）
+sa-mp skill install super-app-mp-dev --target cursor
+sa-mp skill install mobile-design-system --target cursor --target codex
+
+# 安装全部
+sa-mp skill install all --target cursor --target dsh
+
+# 挂到当前项目
+sa-mp skill install all --target cwd
 
 # 自定义路径（可重复）
-sa-mp skill install --path D:\ai-skills
+sa-mp skill install mobile-design-system --path D:\ai-skills
 
 # 更新 Skill 正文与 create 模板（不升 npm 版本）
 sa-mp skill update
@@ -66,7 +76,8 @@ sa-mp preview
 | `sa-mp next-version` | 建议下一版本号 |
 | `sa-mp submit [--version] [--changelog] [--yes]` | 打包并上传检测 |
 | `sa-mp config set / show` | 本机 base-url、api-key、skill-source |
-| `sa-mp skill install / update / status` | 安装 / 更新 / 查看 AI Skill |
+| `sa-mp skill install [all\|name...]` | 安装 AI Skill（可指定 / 交互 / 全部） |
+| `sa-mp skill list / update / status` | 列出 / 更新 / 查看 AI Skill |
 | `sa-mp doctor` | 环境自检 |
 | `sa-mp upgrade` | 只更新全局 npm 包 |
 
@@ -87,9 +98,11 @@ sa-mp preview
 superapp-mp-dev/
 ├── package.json
 ├── bin/sa-mp.mjs          # CLI（发到 npm）
-├── skill/                 # SKILL.md + references（skill update 拉这里）
+├── skills/                # 多个 Skill（skill update 拉这里）
+│   ├── super-app-mp-dev/
+│   └── mobile-design-system/
 ├── templates/vanilla/     # create 模板
-├── bundled/               # 包内兜底 skill/模板
+├── bundled/               # 包内兜底 skills/模板
 └── README.md
 ```
 
@@ -101,7 +114,7 @@ npm version 0.1.0   # 仅 CLI 行为变化时
 npm publish --access public
 ```
 
-只改 `skill/` 或 `templates/`：推 `main` 即可，开发者执行 `sa-mp skill update`，不必 publish。
+只改 `skills/` 或 `templates/`：推 `main` 即可，开发者执行 `sa-mp skill update`，不必 publish。
 
 ## 注意
 

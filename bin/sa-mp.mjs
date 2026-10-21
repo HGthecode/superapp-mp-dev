@@ -39,7 +39,7 @@ const PKG = (() => {
 const SKIP_NAMES = new Set(['.git', '.DS_Store', 'node_modules', 'Thumbs.db'])
 const PACK_SKIP_REL = new Set(['config.json', 'README.md'])
 const PACK_SKIP_PREFIX = ['data/', 'functions/']
-const SKILL_DIR_NAME = 'super-app-mp-dev'
+const LEGACY_SKILL_NAME = 'super-app-mp-dev'
 const DEFAULT_SKILL_SOURCE = 'https://github.com/HGthecode/superapp-mp-dev.git'
 const DEFAULT_STATIC_BASE = 'http://localhost:8900/static'
 const DEFAULT_OPEN_WEB_BASE = 'http://localhost:9174'
@@ -47,9 +47,11 @@ const DEFAULT_API_ORIGIN = 'http://localhost:8900'
 const LOCAL_STATIC_PREFIX = '/__sa_static__'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const PKG_ROOT = resolve(__dirname, '..')
-const BUNDLED_SKILL = join(PKG_ROOT, 'bundled', 'skill')
+const BUNDLED_SKILLS = join(PKG_ROOT, 'bundled', 'skills')
+const BUNDLED_SKILL_LEGACY = join(PKG_ROOT, 'bundled', 'skill')
 const BUNDLED_TEMPLATES = join(PKG_ROOT, 'bundled', 'templates', 'vanilla')
-const REPO_SKILL = join(PKG_ROOT, 'skill')
+const REPO_SKILLS = join(PKG_ROOT, 'skills')
+const REPO_SKILL_LEGACY = join(PKG_ROOT, 'skill')
 const REPO_TEMPLATES = join(PKG_ROOT, 'templates', 'vanilla')
 
 const MIME = {
@@ -81,9 +83,10 @@ function printUsage() {
   sa-mp submit [--version x.y.z] [--changelog 描述] [--yes] [--appid xxx] [--dir 目录]
   sa-mp config set --base-url URL --api-key KEY [--static-base URL] [--open-web-base URL] [--skill-source URL]
   sa-mp config show
-  sa-mp skill install [--target cursor|codex|dsh|cwd]... [--path 目录]... [--force]
+  sa-mp skill install [all|<name>...] [--target cursor|codex|dsh|cwd]... [--path 目录]... [--force]
   sa-mp skill update
   sa-mp skill status
+  sa-mp skill list
   sa-mp data pull [--appid xxx] [--dir 目录]
   sa-mp data push [--appid xxx] [--dir 目录] [--publish]
   sa-mp data diff [--appid xxx] [--dir 目录]
@@ -115,12 +118,67 @@ function contentMetaPath() {
   return join(contentRoot(), 'meta.json')
 }
 
-function contentSkillPath() {
+function contentSkillsRoot() {
+  return join(contentRoot(), 'skills')
+}
+
+/** 单个 skill 缓存目录 */
+function contentSkillPath(name) {
+  return join(contentSkillsRoot(), name)
+}
+
+function contentSkillPathLegacy() {
   return join(contentRoot(), 'skill')
 }
 
 function contentTemplatesPath() {
   return join(contentRoot(), 'templates', 'vanilla')
+}
+
+/** 扫描目录下含 SKILL.md 的子目录名 */
+function listSkillNamesInDir(dir) {
+  if (!existsSync(dir)) return []
+  return readdirSync(dir)
+    .filter((n) => {
+      try {
+        return statSync(join(dir, n)).isDirectory() && existsSync(join(dir, n, 'SKILL.md'))
+      } catch {
+        return false
+      }
+    })
+    .sort()
+}
+
+/** 本机缓存中可用的 skill 名（含旧版单 skill 兼容） */
+function listCachedSkillNames() {
+  const names = listSkillNamesInDir(contentSkillsRoot())
+  const legacy = contentSkillPathLegacy()
+  if (existsSync(join(legacy, 'SKILL.md')) && !names.includes(LEGACY_SKILL_NAME)) {
+    names.push(LEGACY_SKILL_NAME)
+    names.sort()
+  }
+  return names
+}
+
+/** 解析 skill 缓存目录（兼容旧 content/skill） */
+function resolveCachedSkillDir(name) {
+  const multi = contentSkillPath(name)
+  if (existsSync(join(multi, 'SKILL.md'))) return multi
+  if (name === LEGACY_SKILL_NAME) {
+    const legacy = contentSkillPathLegacy()
+    if (existsSync(join(legacy, 'SKILL.md'))) return legacy
+  }
+  return null
+}
+
+function readSkillFrontName(skillDir) {
+  try {
+    const text = readFileSync(join(skillDir, 'SKILL.md'), 'utf8')
+    const m = text.match(/^name:\s*[`'"]?([^\s`'"]+)/m)
+    return m ? m[1] : basename(skillDir)
+  } catch {
+    return basename(skillDir)
+  }
 }
 
 function legacyConfigPath() {
@@ -397,27 +455,47 @@ async function packDir(dir, zipPath) {
   writeFileSync(zipPath, Buffer.concat([...parts, centralBuf, end]))
 }
 
+/** 从本地目录树灌入 skills 缓存 */
+function copySkillsTree(srcSkillsDir, fallbackSingleDir) {
+  const dstRoot = contentSkillsRoot()
+  mkdirSync(dstRoot, { recursive: true })
+  const names = listSkillNamesInDir(srcSkillsDir)
+  if (names.length) {
+    for (const name of names) {
+      const dst = contentSkillPath(name)
+      if (existsSync(dst)) rmSync(dst, { recursive: true, force: true })
+      cpSync(join(srcSkillsDir, name), dst, { recursive: true })
+    }
+    return names
+  }
+  if (fallbackSingleDir && existsSync(join(fallbackSingleDir, 'SKILL.md'))) {
+    const dst = contentSkillPath(LEGACY_SKILL_NAME)
+    if (existsSync(dst)) rmSync(dst, { recursive: true, force: true })
+    cpSync(fallbackSingleDir, dst, { recursive: true })
+    return [LEGACY_SKILL_NAME]
+  }
+  return []
+}
+
 /** 把仓库或包内兜底灌进本机缓存（不访问网络） */
 function seedContentFromLocal(sourceLabel) {
-  let skillSrc = ''
-  let tplSrc = ''
-  if (existsSync(join(REPO_SKILL, 'SKILL.md'))) {
-    skillSrc = REPO_SKILL
-    tplSrc = REPO_TEMPLATES
-  } else if (existsSync(join(BUNDLED_SKILL, 'SKILL.md'))) {
-    skillSrc = BUNDLED_SKILL
-    tplSrc = BUNDLED_TEMPLATES
+  let names = []
+  if (listSkillNamesInDir(REPO_SKILLS).length || existsSync(join(REPO_SKILL_LEGACY, 'SKILL.md'))) {
+    names = copySkillsTree(REPO_SKILLS, REPO_SKILL_LEGACY)
+  } else if (listSkillNamesInDir(BUNDLED_SKILLS).length || existsSync(join(BUNDLED_SKILL_LEGACY, 'SKILL.md'))) {
+    names = copySkillsTree(BUNDLED_SKILLS, BUNDLED_SKILL_LEGACY)
   } else {
     throw new Error('找不到 Skill / 模板，请检查包安装是否完整')
   }
-  const skillDst = contentSkillPath()
+  if (!names.length) throw new Error('本地兜底中没有可用 Skill')
+
+  const tplSrc = existsSync(join(REPO_TEMPLATES, 'index.html'))
+    ? REPO_TEMPLATES
+    : BUNDLED_TEMPLATES
   const tplDst = contentTemplatesPath()
-  if (existsSync(skillDst)) rmSync(skillDst, { recursive: true, force: true })
   if (existsSync(tplDst)) rmSync(tplDst, { recursive: true, force: true })
-  mkdirSync(dirname(skillDst), { recursive: true })
-  mkdirSync(dirname(tplDst), { recursive: true })
-  cpSync(skillSrc, skillDst, { recursive: true })
   if (existsSync(join(tplSrc, 'index.html'))) {
+    mkdirSync(dirname(tplDst), { recursive: true })
     cpSync(tplSrc, tplDst, { recursive: true })
   }
   saveContentMeta({
@@ -425,25 +503,61 @@ function seedContentFromLocal(sourceLabel) {
     revision: sourceLabel,
     updatedAt: new Date().toISOString(),
     seeded: true,
+    skills: names,
   })
-  return { skill: skillDst, templates: tplDst, source: sourceLabel }
+  return {
+    skills: names,
+    skill: contentSkillPath(names[0]),
+    templates: tplDst,
+    source: sourceLabel,
+  }
+}
+
+/** 旧版 content/skill → content/skills/super-app-mp-dev */
+function migrateLegacySkillCache() {
+  const legacy = contentSkillPathLegacy()
+  const dest = contentSkillPath(LEGACY_SKILL_NAME)
+  if (existsSync(join(legacy, 'SKILL.md')) && !existsSync(join(dest, 'SKILL.md'))) {
+    mkdirSync(dirname(dest), { recursive: true })
+    cpSync(legacy, dest, { recursive: true })
+  }
+}
+
+/**
+ * 本仓库检出目录下有 skills/ 时同步进缓存（本地改 skill 立即生效；
+ * npm 全局安装不含 skills/，不会走到这里）
+ */
+function syncRepoSkillsIfPresent() {
+  const names = listSkillNamesInDir(REPO_SKILLS)
+  if (!names.length) return
+  for (const name of names) {
+    const dst = contentSkillPath(name)
+    if (existsSync(dst)) rmSync(dst, { recursive: true, force: true })
+    mkdirSync(dirname(dst), { recursive: true })
+    cpSync(join(REPO_SKILLS, name), dst, { recursive: true })
+  }
 }
 
 /** 确保本机缓存有 Skill；优先网络拉取，失败则本地灌入 */
 function ensureContentCache() {
-  const cachedSkill = contentSkillPath()
-  if (existsSync(join(cachedSkill, 'SKILL.md'))) {
-    return { dir: cachedSkill, source: 'cache' }
+  migrateLegacySkillCache()
+  syncRepoSkillsIfPresent()
+  const names = listCachedSkillNames()
+  if (names.length) {
+    return { skills: names, dir: resolveCachedSkillDir(names[0]), source: 'cache' }
   }
   try {
     fetchContent()
-    return { dir: contentSkillPath(), source: 'cache' }
+    syncRepoSkillsIfPresent()
+    const after = listCachedSkillNames()
+    return { skills: after, dir: resolveCachedSkillDir(after[0]), source: 'cache' }
   } catch (e) {
     console.warn(`拉取失败，灌入本地兜底: ${e.message}`)
-    const seeded = seedContentFromLocal(
-      existsSync(join(REPO_SKILL, 'SKILL.md')) ? 'repo-seed' : 'bundled-seed',
-    )
-    return { dir: seeded.skill, source: seeded.source }
+    const hasRepo =
+      listSkillNamesInDir(REPO_SKILLS).length > 0 ||
+      existsSync(join(REPO_SKILL_LEGACY, 'SKILL.md'))
+    const seeded = seedContentFromLocal(hasRepo ? 'repo-seed' : 'bundled-seed')
+    return { skills: seeded.skills, dir: seeded.skill, source: seeded.source }
   }
 }
 
@@ -458,8 +572,11 @@ function resolveTemplateDir() {
   throw new Error('找不到 create 模板，请执行 sa-mp skill update')
 }
 
-function resolveSkillBodyDir() {
-  return ensureContentCache()
+function resolveSkillBodyDir(name = LEGACY_SKILL_NAME) {
+  ensureContentCache()
+  const dir = resolveCachedSkillDir(name)
+  if (!dir) throw new Error(`缓存中无 Skill: ${name}，请执行 sa-mp skill update`)
+  return { dir, source: 'cache', name }
 }
 
 function loadContentMeta() {
@@ -500,23 +617,24 @@ function fetchContent(force = false) {
   runGit(['clone', '--depth', '1', '--single-branch', source, staging])
   const rev = runGit(['rev-parse', 'HEAD'], { cwd: staging })
 
-  const skillSrc = join(staging, 'skill')
+  const skillsSrc = join(staging, 'skills')
+  const skillLegacySrc = join(staging, 'skill')
   const tplSrc = join(staging, 'templates', 'vanilla')
-  if (!existsSync(join(skillSrc, 'SKILL.md'))) {
-    throw new Error('远端仓库缺少 skill/SKILL.md')
+  const names = copySkillsTree(skillsSrc, skillLegacySrc)
+  if (!names.length) {
+    throw new Error('远端仓库缺少 skills/*/SKILL.md 或 skill/SKILL.md')
   }
   if (!existsSync(join(tplSrc, 'index.html'))) {
     throw new Error('远端仓库缺少 templates/vanilla/index.html')
   }
 
-  const skillDst = contentSkillPath()
   const tplDst = contentTemplatesPath()
-  if (existsSync(skillDst)) rmSync(skillDst, { recursive: true, force: true })
   if (existsSync(tplDst)) rmSync(tplDst, { recursive: true, force: true })
-  mkdirSync(dirname(skillDst), { recursive: true })
   mkdirSync(dirname(tplDst), { recursive: true })
-  cpSync(skillSrc, skillDst, { recursive: true })
   cpSync(tplSrc, tplDst, { recursive: true })
+  // 清理旧版单 skill 缓存目录
+  const legacy = contentSkillPathLegacy()
+  if (existsSync(legacy)) rmSync(legacy, { recursive: true, force: true })
   rmSync(staging, { recursive: true, force: true })
 
   saveContentMeta({
@@ -524,8 +642,9 @@ function fetchContent(force = false) {
     revision: rev,
     updatedAt: new Date().toISOString(),
     force: !!force,
+    skills: names,
   })
-  console.log(`内容已更新: ${rev.slice(0, 8)}`)
+  console.log(`内容已更新: ${rev.slice(0, 8)}（skills: ${names.join(', ')}）`)
   return rev
 }
 
@@ -533,28 +652,29 @@ function ensureContent() {
   return ensureContentCache()
 }
 
-function skillTargetPath(name, cwd = process.cwd()) {
+/** 挂载目标路径（按 skill 名） */
+function skillTargetPath(targetName, skillName, cwd = process.cwd()) {
   const home = homedir()
-  if (name === 'cursor') return join(home, '.cursor', 'skills', SKILL_DIR_NAME)
-  if (name === 'codex') {
+  if (targetName === 'cursor') return join(home, '.cursor', 'skills', skillName)
+  if (targetName === 'codex') {
     const codexHome = process.env.CODEX_HOME || join(home, '.codex')
-    return join(codexHome, 'skills', SKILL_DIR_NAME)
+    return join(codexHome, 'skills', skillName)
   }
-  if (name === 'dsh') return join(home, '.dsh', 'skills', SKILL_DIR_NAME)
-  if (name === 'cwd') {
+  if (targetName === 'dsh') return join(home, '.dsh', 'skills', skillName)
+  if (targetName === 'cwd') {
     return [
-      join(cwd, '.cursor', 'skills', SKILL_DIR_NAME),
-      join(cwd, '.dsh', 'skills', SKILL_DIR_NAME),
-      join(cwd, '.agents', 'skills', SKILL_DIR_NAME),
+      join(cwd, '.cursor', 'skills', skillName),
+      join(cwd, '.dsh', 'skills', skillName),
+      join(cwd, '.agents', 'skills', skillName),
     ]
   }
   return null
 }
 
-function normalizeCustomPath(p) {
+function normalizeCustomPath(p, skillName) {
   const abs = resolve(p)
-  if (basename(abs) === SKILL_DIR_NAME) return abs
-  return join(abs, SKILL_DIR_NAME)
+  if (basename(abs) === skillName) return abs
+  return join(abs, skillName)
 }
 
 function linkKind(path) {
@@ -621,28 +741,43 @@ function pointsToCache(path, cacheDir) {
   }
 }
 
-function removePath(path) {
+function pathExists(path) {
   try {
-    const st = lstatSync(path)
-    if (st.isSymbolicLink() || (platform() === 'win32' && st.isDirectory() && linkKind(path).kind === 'junction')) {
-      // Windows junction / symlink dir
-      if (platform() === 'win32') {
-        spawnSync('cmd', ['/c', `rmdir "${path}"`], { stdio: 'ignore' })
-        if (existsSync(path)) rmSync(path, { recursive: true, force: true })
-      } else {
-        unlinkSync(path)
-      }
-      return
-    }
+    lstatSync(path)
+    return true
   } catch {
-    /* fall through */
+    return false
   }
-  if (existsSync(path)) rmSync(path, { recursive: true, force: true })
+}
+
+function removePath(path) {
+  if (!pathExists(path)) return
+  const kind = linkKind(path)
+  // Windows 目录联接 / 符号链接：必须用 rmdir，不能 rmSync 递归进目标
+  if (platform() === 'win32' && (kind.kind === 'junction' || kind.kind === 'symlink')) {
+    spawnSync('cmd', ['/c', `rmdir "${path}"`], { stdio: 'ignore' })
+    if (pathExists(path)) {
+      try {
+        unlinkSync(path)
+      } catch {
+        /* ignore */
+      }
+    }
+    if (pathExists(path)) {
+      throw new Error(`无法删除已有链接: ${path}`)
+    }
+    return
+  }
+  if (kind.kind === 'symlink') {
+    unlinkSync(path)
+    return
+  }
+  rmSync(path, { recursive: true, force: true })
 }
 
 function linkSkill(dest, source, force) {
   mkdirSync(dirname(dest), { recursive: true })
-  if (existsSync(dest) || (() => { try { lstatSync(dest); return true } catch { return false } })()) {
+  if (pathExists(dest)) {
     if (pointsToCache(dest, source)) {
       console.log(`已链接，跳过: ${dest}`)
       return { dest, kind: linkKind(dest).kind }
@@ -660,14 +795,21 @@ function linkSkill(dest, source, force) {
     return { dest, kind: linkType === 'junction' ? 'junction' : 'symlink' }
   } catch (e) {
     console.warn(`链接失败，改为复制: ${e.message}`)
+    if (pathExists(dest)) removePath(dest)
     cpSync(source, dest, { recursive: true })
     console.log(`copy: ${dest}`)
     return { dest, kind: 'copy' }
   }
 }
 
-function refreshCopyTargets(targets, source) {
+function refreshCopyTargets(targets) {
   for (const t of targets) {
+    const skillName = t.skill || LEGACY_SKILL_NAME
+    const source = resolveCachedSkillDir(skillName)
+    if (!source) {
+      console.warn(`跳过（缓存无 ${skillName}）: ${t.path}`)
+      continue
+    }
     const kind = linkKind(t.path)
     if (kind.kind === 'copy') {
       removePath(t.path)
@@ -677,13 +819,45 @@ function refreshCopyTargets(targets, source) {
   }
 }
 
-async function askInteractiveTargets() {
+function printSkillCatalog(names) {
+  console.log('可用 Skill:')
+  names.forEach((name, i) => {
+    const dir = resolveCachedSkillDir(name)
+    const title = dir ? readSkillFrontName(dir) : name
+    console.log(`  ${i + 1}) ${name}${title !== name ? `  (${title})` : ''}`)
+  })
+  console.log('  a) all（全部）')
+}
+
+async function askInteractiveSkills(names) {
   const rl = createInterface({ input: process.stdin, output: process.stdout })
   const ask = (q) => new Promise((res) => rl.question(q, res))
-  console.log(`可选目标:
-  1) cursor  ${join(homedir(), '.cursor', 'skills', SKILL_DIR_NAME)}
-  2) codex   ${join(process.env.CODEX_HOME || join(homedir(), '.codex'), 'skills', SKILL_DIR_NAME)}
-  3) dsh     ${join(homedir(), '.dsh', 'skills', SKILL_DIR_NAME)}
+  printSkillCatalog(names)
+  const ans = await ask('输入编号或名称（逗号分隔，如 1,2 或 all）: ')
+  rl.close()
+  const picked = []
+  for (const part of String(ans).split(/[,，\s]+/).filter(Boolean)) {
+    if (part === 'a' || part.toLowerCase() === 'all') return [...names]
+    const idx = Number(part)
+    if (Number.isInteger(idx) && idx >= 1 && idx <= names.length) {
+      picked.push(names[idx - 1])
+    } else if (names.includes(part)) {
+      picked.push(part)
+    } else {
+      throw new Error(`未知 Skill: ${part}`)
+    }
+  }
+  return [...new Set(picked)]
+}
+
+async function askInteractiveTargets(skillName) {
+  const rl = createInterface({ input: process.stdin, output: process.stdout })
+  const ask = (q) => new Promise((res) => rl.question(q, res))
+  const sample = skillName || '<skill>'
+  console.log(`可选挂载目标（Skill 目录名: ${sample}）:
+  1) cursor  ${join(homedir(), '.cursor', 'skills', sample)}
+  2) codex   ${join(process.env.CODEX_HOME || join(homedir(), '.codex'), 'skills', sample)}
+  3) dsh     ${join(homedir(), '.dsh', 'skills', sample)}
   4) cwd     当前项目 .cursor / .dsh / .agents skills
   5) 自定义路径`)
   const ans = await ask('输入编号（逗号分隔，如 1,2,4）: ')
@@ -702,30 +876,64 @@ async function askInteractiveTargets() {
   return selected
 }
 
+/** 解析 install 位置参数：all / skill 名；其余留给 parseArgs */
+function splitSkillInstallArgv(argv) {
+  const skillNames = []
+  const rest = []
+  let i = 0
+  while (i < argv.length) {
+    const a = argv[i]
+    if (a.startsWith('-')) {
+      rest.push(...argv.slice(i))
+      break
+    }
+    skillNames.push(a)
+    i++
+  }
+  return { skillNames, rest }
+}
+
 async function cmdSkill(argv) {
   const sub = argv[0]
+  if (sub === 'list') {
+    ensureContent()
+    const names = listCachedSkillNames()
+    if (!names.length) {
+      console.log('无可用 Skill，请执行 sa-mp skill update')
+      return
+    }
+    printSkillCatalog(names)
+    console.log(`\n安装示例:
+  sa-mp skill install ${names[0]} --target cursor
+  sa-mp skill install all --target cursor
+  sa-mp skill install`)
+    return
+  }
   if (sub === 'update') {
     fetchContent(true)
     const cfg = loadConfig()
-    const source = resolveSkillBodyDir().dir
     const targets = Array.isArray(cfg.skillTargets) ? cfg.skillTargets : []
-    refreshCopyTargets(targets, source)
+    refreshCopyTargets(targets)
     return
   }
   if (sub === 'status') {
     const meta = loadContentMeta()
-    const body = (() => {
-      try {
-        return resolveSkillBodyDir()
-      } catch (e) {
-        return { dir: '', source: 'missing', error: e.message }
-      }
-    })()
+    let skills = []
+    try {
+      ensureContent()
+      skills = listCachedSkillNames().map((name) => ({
+        name,
+        dir: resolveCachedSkillDir(name),
+        title: readSkillFrontName(resolveCachedSkillDir(name)),
+      }))
+    } catch (e) {
+      skills = [{ error: e.message }]
+    }
     const cfg = loadConfig()
     console.log(JSON.stringify({
       skillSource: skillSource(cfg),
       content: meta,
-      body,
+      skills,
       targets: (cfg.skillTargets || []).map((t) => ({
         ...t,
         live: linkKind(t.path),
@@ -734,49 +942,75 @@ async function cmdSkill(argv) {
     return
   }
   if (sub === 'install') {
-    let args = parseArgs(argv.slice(1))
+    const { skillNames: rawNames, rest } = splitSkillInstallArgv(argv.slice(1))
+    let args = parseArgs(rest)
+
+    ensureContent()
+    const available = listCachedSkillNames()
+    if (!available.length) throw new Error('无可用 Skill，请执行 sa-mp skill update')
+
+    let selectedSkills = []
+    if (rawNames.includes('all')) {
+      selectedSkills = [...available]
+    } else if (rawNames.length) {
+      for (const n of rawNames) {
+        if (!available.includes(n)) {
+          throw new Error(`未知 Skill: ${n}\n可用: ${available.join(', ')}`)
+        }
+      }
+      selectedSkills = [...new Set(rawNames)]
+    } else {
+      if (!process.stdin.isTTY) {
+        throw new Error('非交互环境请传 skill 名或 all，例如: sa-mp skill install all --target cursor')
+      }
+      selectedSkills = await askInteractiveSkills(available)
+    }
+    if (!selectedSkills.length) throw new Error('未选择任何 Skill')
+
     if (!args.target.length && !args.path.length) {
       if (!process.stdin.isTTY) {
         throw new Error('非交互环境请传 --target 或 --path')
       }
-      const picked = await askInteractiveTargets()
+      const picked = await askInteractiveTargets(selectedSkills[0])
       args = { ...args, target: picked.target, path: picked.path }
     }
     if (!args.target.length && !args.path.length) {
-      throw new Error('未选择任何目标')
-    }
-
-    ensureContent()
-    const source = resolveSkillBodyDir().dir
-    const dests = []
-    for (const t of args.target) {
-      const p = skillTargetPath(t)
-      if (!p) throw new Error(`未知 --target: ${t}`)
-      if (Array.isArray(p)) dests.push(...p.map((d) => ({ path: d, via: t })))
-      else dests.push({ path: p, via: t })
-    }
-    for (const p of args.path) {
-      dests.push({ path: normalizeCustomPath(p), via: 'path' })
+      throw new Error('未选择任何挂载目标')
     }
 
     const results = []
-    for (const d of dests) {
-      const r = linkSkill(d.path, source, !!args.force)
-      results.push({ ...r, via: d.via })
+    for (const skillName of selectedSkills) {
+      const source = resolveCachedSkillDir(skillName)
+      if (!source) throw new Error(`缓存中无 Skill: ${skillName}`)
+      const dests = []
+      for (const t of args.target) {
+        const p = skillTargetPath(t, skillName)
+        if (!p) throw new Error(`未知 --target: ${t}`)
+        if (Array.isArray(p)) dests.push(...p.map((d) => ({ path: d, via: t })))
+        else dests.push({ path: p, via: t })
+      }
+      for (const p of args.path) {
+        dests.push({ path: normalizeCustomPath(p, skillName), via: 'path' })
+      }
+      for (const d of dests) {
+        const r = linkSkill(d.path, source, !!args.force)
+        results.push({ ...r, via: d.via, skill: skillName })
+      }
     }
 
     const cfg = loadConfig()
     const prev = Array.isArray(cfg.skillTargets) ? cfg.skillTargets : []
     const map = new Map(prev.map((x) => [x.path, x]))
     for (const r of results) {
-      map.set(r.dest, { path: r.dest, kind: r.kind, via: r.via })
+      map.set(r.dest, { path: r.dest, kind: r.kind, via: r.via, skill: r.skill })
     }
     cfg.skillTargets = [...map.values()]
     saveConfig(cfg)
+    console.log(`已安装: ${selectedSkills.join(', ')}`)
     console.log(`已写入 skillTargets: ${configPath()}`)
     return
   }
-  throw new Error('用法: sa-mp skill install|update|status')
+  throw new Error('用法: sa-mp skill install|update|status|list')
 }
 
 async function cmdInit(argv) {
@@ -1247,25 +1481,28 @@ async function cmdDoctor() {
     checks.push({ name: 'config.json appid', ok: !!appid, detail: appid || '(空)' })
   }
 
-  let body
+  let skillNames = []
   try {
-    body = resolveSkillBodyDir()
+    ensureContent()
+    skillNames = listCachedSkillNames()
   } catch (e) {
-    body = { source: 'missing', error: e.message }
+    skillNames = []
   }
   const meta = loadContentMeta()
   checks.push({
     name: 'Skill 内容缓存',
-    ok: body.source !== 'missing',
+    ok: skillNames.length > 0,
     detail: meta
-      ? `${meta.revision?.slice(0, 8) || '?'} (${body.source})`
-      : `${body.source}${body.error ? ': ' + body.error : ''}`,
+      ? `${meta.revision?.slice(0, 8) || '?'} [${skillNames.join(', ') || '空'}]`
+      : skillNames.length
+        ? skillNames.join(', ')
+        : 'missing',
   })
 
   for (const t of cfg.skillTargets || []) {
     const live = linkKind(t.path)
     checks.push({
-      name: `Skill 目标 ${t.via || ''}`,
+      name: `Skill 目标 ${t.skill || ''} ${t.via || ''}`.trim(),
       ok: live.kind !== 'missing',
       detail: `${t.path} [${live.kind}]`,
     })

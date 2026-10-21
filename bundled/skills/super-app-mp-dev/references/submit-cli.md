@@ -6,7 +6,9 @@ CLI 已发布为全局命令 `sa-mp`（仓库 [superapp-mp-dev](https://github.c
 
 ```bash
 npm install -g sa-mp
-sa-mp skill install --target cursor --target codex
+sa-mp skill install all --target cursor --target codex
+# 或: sa-mp skill install super-app-mp-dev --target cursor
+# 或: sa-mp skill install（交互选择）
 sa-mp config set --base-url https://你的开放平台域名/api/open --api-key sa_你的密钥
 ```
 
@@ -54,7 +56,7 @@ sa-mp submit --changelog "修复滚动" --yes
 | `console` | 本地 serve `admin/`（默认 5180）+ 打开已登录的控制台页 |
 | `next-version` | 建议下一版本号 |
 | `submit [--version] [--changelog] [--yes]` | 打包并上传检测 |
-| `skill install / update / status` | 安装 / 更新 AI Skill |
+| `skill install [all\|name...]` / `list` / `update` / `status` | 安装 / 列出 / 更新 AI Skill |
 | `doctor` | 环境自检 |
 | `upgrade` | 更新全局 npm 包（不含 Skill） |
 
@@ -101,7 +103,8 @@ sa-mp submit --version ... --changelog "..." --yes
 ## Skill 更新
 
 ```bash
-sa-mp skill update    # 拉最新 SKILL.md / references / create 模板
+sa-mp skill update    # 拉最新 skills/*/ 与 create 模板
+sa-mp skill list
 sa-mp skill status
 ```
 

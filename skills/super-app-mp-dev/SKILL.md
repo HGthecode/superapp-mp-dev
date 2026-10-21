@@ -24,7 +24,7 @@ metadata:
 
 目标产物：可直接上传的 **`.zip` 静态包**，或经 CLI 直接提交（提交时直接打包目录，不跑 Vite）。
 
-开发者须已全局安装 CLI：`npm install -g sa-mp`，并用 `sa-mp skill install` 把本 Skill 挂到 AI 工具。
+开发者须已全局安装 CLI：`npm install -g sa-mp`，并用 `sa-mp skill install super-app-mp-dev`（或 `all` / 交互）把本 Skill 挂到 AI 工具。
 
 ## 强制：开发前先确认并写入 README
 
