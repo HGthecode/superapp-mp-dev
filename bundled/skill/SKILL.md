@@ -5,9 +5,10 @@ description: >-
   供开放平台上传检测、预览与审核发布。新建或改写托管 H5（C 端 Vue/Vant）与
   开放平台控制台 admin/（Element Plus + vue-ui-plus + SuperAppAdmin）、
   打包 zip、用全局 CLI sa-mp（Node 18+）本地 preview/console/提交版本、
-  处理路径/CSP/平台共享库/JSBridge/业务域名/虚拟表与 auth:open 云函数时使用。
+  处理路径/CSP/平台共享库/JSBridge/业务域名/云数据与 auth:open 云函数时使用。
+  任何新功能须先出计划（功能介绍、App/控制台页面、云函数、云数据）经用户确认后再开发。
 metadata:
-  version: "2.2.0"
+  version: "2.3.0"
 ---
 
 # SuperApp 托管 H5 ZIP 构建指南
@@ -31,34 +32,30 @@ metadata:
 
 仅改文案、修 bug、调已有样式且不扩大功能范围时，可跳过；但若改主题色或增删功能模块，须先更新 `README.md` 并经确认。
 
-## 强制：复杂需求先出计划再动手
+## 强制：任何新功能先出计划再动手
 
-以下场景**禁止直接改代码 / 改 schema / 执行 `sa-mp data push`**，必须先给出开发计划，**等开发者明确确认后再实现**：
+**做任何新功能开发时**，禁止直接改代码 / 改 schema / `data push` / `fn push`。必须先读 [feature-plan.md](references/feature-plan.md)，给出开发计划并**等用户确认最终方案后再实现**。
 
-- 稍复杂的业务需求（多页面、多流程、预约/下单/库存等）
-- **新建或修改**虚拟表（含增字段、改权限、改类型意图）
-- 会同时动到页面结构 + 数据模型的需求
-- **新建或改造**开放平台控制台（`admin/` 菜单、发货/审核等 `auth: open` 动作）
+计划**必须**包含以下五章（无变更写「无」+ 原因，不可缺标题）：
 
-计划须至少包含：
+1. **功能介绍** — 做什么、给谁用、范围边界
+2. **App 端页面** — 本次新增/修改的每个 C 端页面及描述
+3. **控制台页面** — 本次新增/修改的每个 `admin/` 页面及描述
+4. **云函数** — 每个函数的名称、`auth`、作用描述
+5. **云数据** — 新建/改字段/改权限/沿用；新建须含字段与权限要点
 
-1. **功能与页面**：C 端页面 / 控制台菜单；主流程步骤
-2. **数据表设计**：每张表的逻辑名、标题、字段列表（`name` / `fieldType` / 必填 / 索引 / 说明）、权限（list/get/create/update/delete → subject）
-3. **云函数与 auth**：`public` / `member` / `open` 分别给谁用
-4. **环境与发布**：开发默认 `preview`；是否 `push --publish`；正式环境何时切 `prod`
-5. **风险**：已发布字段不可改类型等约束；破坏性变更如何处理
+确认话术：「以下为本次功能开发计划……回复「确认」后我按此方案执行。」用户改计划则更新后再确认；落地不得擅自超出确认范围。
 
-确认话术示例：「以上表结构与开发计划是否按此执行？确认后我再改 `data/schema.json` 并写页面。」
-
-简单改文案、调样式、单字段展示且**不改表**时，可直接做，不必走本流程。表结构设计细则见 [app-data.md](references/app-data.md)。
+仅改文案、修明确 bug、调样式且不新增功能点时，可跳过。表结构设计细则见 [app-data.md](references/app-data.md)。
 
 ## 何时使用
 
 - 从零新建托管 H5——**先**走 [project-brief.md](references/project-brief.md)，再 `sa-mp create`（含 C 端 + `admin/` 起步）并打包成 `.zip`
+- 新功能 / 改流程 / 改表或云函数——**先**走 [feature-plan.md](references/feature-plan.md)，用户确认后再开发
 - 将已有 H5 改写为平台规范并打包
 - 用户说「本地预览 / H5 调试」——`sa-mp preview`（`/mp/debug`，默认 5179）
 - 用户说「控制台 / admin / 后台 / 发货管理」——先读 [console.md](references/console.md)，用 `sa-mp console`（默认 5180）
-- 用户说「存业务数据 / 虚拟表 / 商品订单预约」——先读 [app-data.md](references/app-data.md)
+- 用户说「存业务数据 / 云数据 / 商品订单预约」——先读 [app-data.md](references/app-data.md)
 - 用户说「提交 / 上传版本 / 发布到开放平台」——走 CLI 提交流程
 
 ## 工作流程
@@ -66,28 +63,30 @@ metadata:
 每一步动手前必须先读对应 reference 并严格遵守：
 
 0. **开发前确认** — 先读 [project-brief.md](references/project-brief.md)；必问齐全 → 开发者确认 → 写入根目录 `README.md`（未完成禁止继续）
-1. **平台共享库** — 先读 [platform-libs.md](references/platform-libs.md)（C 端 Vue/Vant；控制台见 Admin 依赖）
-2. **新建目录** — `sa-mp create <目录>` 或空目录 `sa-mp create`；再读 [zip-artifact-spec.md](references/zip-artifact-spec.md)；用已确认内容覆盖模板里的 `README.md`
-3. **项目配置** — `sa-mp init --appid mp...`
-4. **本地预览（C 端）** — `sa-mp preview`（`/mp/debug` + 本地 iframe，默认 `preview` 数据环境）
-5. **控制台（按需）** — 先读 [console.md](references/console.md)；维护 `admin/` + `auth: open` 云函数；本地 `sa-mp console`（与 preview 可同时开）
-6. **能力与 Bridge** — 先读 [device-capabilities.md](references/device-capabilities.md)
-7. **业务域名** — 先读 [business-domains.md](references/business-domains.md)
-8. **跨端适配** — 先读 [cross-platform-h5.md](references/cross-platform-h5.md)
-9. **虚拟表 / 云函数（按需）** — 先读 [app-data.md](references/app-data.md)；**先计划并经确认**，再维护 `data/schema.json`、`functions/*.js` 与 `functions/meta.json`，执行 `sa-mp data push --publish` / `sa-mp fn push --publish`。C 端只用 `SuperAppFn`；控制台只用 `SuperAppAdmin.call`
-10. **打包** — 逐条核对各 reference 末尾自检清单后再打包
-11. **提交上传** — 先读 [submit-cli.md](references/submit-cli.md)；**必须先向用户确认版本号与更新描述，用户回复确认后才执行 `sa-mp submit --yes`**
+1. **新功能计划** — 凡新功能先读 [feature-plan.md](references/feature-plan.md)；五章计划 → 用户确认 → 再改代码/schema/push
+2. **平台共享库** — 先读 [platform-libs.md](references/platform-libs.md)（C 端 Vue/Vant；控制台见 Admin 依赖）
+3. **新建目录** — `sa-mp create <目录>` 或空目录 `sa-mp create`；再读 [zip-artifact-spec.md](references/zip-artifact-spec.md)；用已确认内容覆盖模板里的 `README.md`
+4. **项目配置** — `sa-mp init --appid mp...`
+5. **本地预览（C 端）** — `sa-mp preview`（`/mp/debug` + 本地 iframe，默认 `preview` 数据环境）
+6. **控制台（按需）** — 先读 [console.md](references/console.md)；维护 `admin/` + `auth: open` 云函数；本地 `sa-mp console`（与 preview 可同时开）
+7. **能力与 Bridge** — 先读 [device-capabilities.md](references/device-capabilities.md)
+8. **业务域名** — 先读 [business-domains.md](references/business-domains.md)
+9. **跨端适配** — 先读 [cross-platform-h5.md](references/cross-platform-h5.md)
+10. **云数据 / 云函数（按需）** — 先读 [app-data.md](references/app-data.md)；**仅在功能计划确认后**维护 `data/schema.json`、`functions/*.js` 与 `functions/meta.json`，执行 `sa-mp data push --publish` / `sa-mp fn push --publish`。C 端只用 `SuperAppFn`；控制台只用 `SuperAppAdmin.call`
+11. **打包** — 逐条核对各 reference 末尾自检清单后再打包
+12. **提交上传** — 先读 [submit-cli.md](references/submit-cli.md)；**必须先向用户确认版本号与更新描述，用户回复确认后才执行 `sa-mp submit --yes`**
 
 ## Reference
 
 | 文档 | 何时读 |
 | --- | --- |
-| [project-brief.md](references/project-brief.md) | **最先**：必问清单、确认话术、`README.md` 模板 |
+| [project-brief.md](references/project-brief.md) | **项目级最先**：必问清单、`README.md` |
+| [feature-plan.md](references/feature-plan.md) | **每个新功能最先**：五章计划与确认话术 |
 | [platform-libs.md](references/platform-libs.md) | Tailwind、Vue、Vant、Admin 依赖、`SuperApp*` |
 | [zip-artifact-spec.md](references/zip-artifact-spec.md) | 目录结构（含 `admin/`）、相对路径、模板、打包自检 |
 | [device-capabilities.md](references/device-capabilities.md) | 壳业务方法、相册/相机/麦克风、禁止能力 |
 | [business-domains.md](references/business-domains.md) | 业务域名白名单与 `fetch` 规则 |
 | [cross-platform-h5.md](references/cross-platform-h5.md) | 触摸、滚动、安全区 |
-| [app-data.md](references/app-data.md) | 虚拟表、云函数、`preview`/`prod`、`SuperAppFn` |
+| [app-data.md](references/app-data.md) | 云数据、云函数、`preview`/`prod`、`SuperAppFn` |
 | [console.md](references/console.md) | `admin/`、`SuperAppAdmin`、`sa-mp console`、`auth: open` |
 | [submit-cli.md](references/submit-cli.md) | API Key、`create` / `preview` / `console` / `submit` |

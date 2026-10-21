@@ -31,7 +31,7 @@ app.zip
 
 - `node_modules`、`.git`、`.DS_Store`
 - `*.map`、构建配置（`vite.config.*`、`webpack.config.*` 等）
-- `config.json`、`README.md`、`data/`、`functions/`（由 CLI 排除；简介与主题写在 README；虚拟表与云函数走 `sa-mp data/fn push`）
+- `config.json`、`README.md`、`data/`、`functions/`（由 CLI 排除；简介与主题写在 README；云数据与云函数走 `sa-mp data/fn push`）
 - 多套一层目录导致 `index.html` 不在根（错误：`app/index.html`）
 - 把 Element Plus / VXE / vue-ui-plus 源码打进 zip（须用 `__SUPER_APP_STATIC__/mp/...`）
 

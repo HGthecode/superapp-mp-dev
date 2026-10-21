@@ -16,7 +16,7 @@
 | `__SUPER_APP_STATIC__/tmuijssdk/tmuiJssdk1.0.0.min.js` | … |
 | `__SUPER_APP_STATIC__/mp/super-app-jssdk.1.0.0.js` | … |
 | `__SUPER_APP_STATIC__/mp/super-app-open.1.0.0.js` | … |
-| `__SUPER_APP_STATIC__/mp/super-app-data.1.0.0.js` | 虚拟表运行时 SDK |
+| `__SUPER_APP_STATIC__/mp/super-app-data.1.0.0.js` | 云数据运行时 SDK |
 | `__SUPER_APP_STATIC__/mp/super-app-fn.1.0.0.js` | 云函数调用 SDK（`SuperAppFn.call`） |
 | `__SUPER_APP_STATIC__/mp/admin-ui.1.0.0.js` | 控制台薄封装（`SuperAppAdmin`，需先加载下方 Admin 依赖） |
 
@@ -97,7 +97,7 @@ SuperAppOpen.request('/microApps/catalog/pageList', { pageIndex: 0, pageSize: 20
 
 ## SuperAppData / SuperAppFn
 
-需要服务端存业务数据时，先读 [app-data.md](app-data.md)：维护 `data/schema.json` 与 `functions/meta.json`，`sa-mp data push --publish`、`sa-mp fn push --publish`。页面只用 `SuperAppFn.call`，不要直连虚拟表增删改查。
+需要服务端存业务数据时，先读 [app-data.md](app-data.md)：维护 `data/schema.json` 与 `functions/meta.json`，`sa-mp data push --publish`、`sa-mp fn push --publish`。页面只用 `SuperAppFn.call`，不要直连云数据增删改查。
 
 ```html
 <script src="__SUPER_APP_STATIC__/mp/super-app-data.1.0.0.js" crossorigin></script>

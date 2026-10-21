@@ -1,4 +1,4 @@
-# 微应用数据（虚拟表）
+# 微应用数据（云数据）
 
 平台为每个微应用提供托管数据能力：用 `data/schema.json` 定义表结构，运行时用 `SuperAppData` 做行级增删改查。**不要**把数据库地址或连接串写进页面，也**不必**为此申报业务域名（走平台 API origin）。
 
@@ -94,7 +94,7 @@ sa-mp data push --publish
 const listed = await SuperAppFn.call('listProducts', { page: 1, pageSize: 20 }, { env: 'preview' })
 ```
 
-页面不要直接调虚拟表增删改查。列表、下单、改状态都写成 `functions/*.js`，用 `SuperAppFn.call`。`SuperAppData` 仅保留给旧页面；新页面不要引用。
+页面不要直接调云数据增删改查。列表、下单、改状态都写成 `functions/*.js`，用 `SuperAppFn.call`。`SuperAppData` 仅保留给旧页面；新页面不要引用。
 
 `SuperAppFn` / `SuperApp.getDataSession` **默认环境为 `preview`**（物理表 `ad_*_preview`）。正式环境必须显式 `{ env: 'prod' }`。`preview` 与 `prod` 数据互不相通；开放平台「数据」页默认看 `prod`，本地调试请切到「预览」。
 
@@ -141,7 +141,7 @@ preview 跑草稿，prod 跑已发布快照。`ctx.user.id` 只来自凭证，�
 
 - [ ] `data/schema.json` 存在且未打进 zip
 - [ ] 已 `sa-mp data push --publish`
-- [ ] 页面引用 `super-app-fn.1.0.0.js`，数据访问走云函数，不直连虚拟表 CRUD
+- [ ] 页面引用 `super-app-fn.1.0.0.js`，数据访问走云函数，不直连云数据 CRUD
 - [ ] `functions/meta.json` 为每个函数写了 `public` / `member` / `open`
 - [ ] 未在页面写数据库连接串 / AppSecret
 - [ ] 表权限已按业务设置（默认 deny）
